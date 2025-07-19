@@ -16,12 +16,6 @@ services:
       - "8001:8001"
     networks:
       - idx_agent_net
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8001/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
 
   ui:
     build:
@@ -29,8 +23,7 @@ services:
       dockerfile: Dockerfile
     command: [ "ui" ]
     depends_on:
-      api:
-        condition: service_healthy
+      - api
     env_file:
       - .env
     environment:

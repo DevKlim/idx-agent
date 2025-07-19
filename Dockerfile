@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED 1
 
 # Install system dependencies
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends dos2unix && \
+    apt-get install -y --no-install-recommends dos2unix curl && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

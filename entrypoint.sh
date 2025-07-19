@@ -2,13 +2,16 @@
 set -e
 
 # The first argument to this script determines which service to run.
-COMMAND=$1
+# Remove carriage returns from the command
+COMMAND=$(echo "$1" | tr -d '\r')
 
 # Function to start the FastAPI application
 start_api() {
     echo "Starting IDX Agent API..."
+    pwd
+    ls -l api
     # Use exec to replace the shell process with the uvicorn process
-    exec uvicorn api.main:app --host "0.0.0.0" --port 8001
+    exec uvicorn api.main:app --host "0.0.0.0" --port "$API_PORT"
 }
 
 # Function to start the Streamlit UI

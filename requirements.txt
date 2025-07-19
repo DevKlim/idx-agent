@@ -1,6 +1,6 @@
 streamlit
 fastapi
-uvicorn
+uvicorn[standard]
 sentence-transformers
 pydantic
 pydantic-settings

@@ -1,5 +1,6 @@
 
 from fastapi import APIRouter, HTTPException, Body, UploadFile, File
+from fastapi.openapi.utils import get_openapi
 import httpx
 import json
 
@@ -12,6 +13,10 @@ EIDO_AGENT_URL = settings.eido_agent_url
 
 # Store "claimed" incidents in memory for simplicity
 claimed_incidents = set()
+
+@router.get("/openapi.json", include_in_schema=False)
+async def get_open_api_endpoint():
+    return get_openapi(title="IDX Agent API", version="1.0.0", routes=router.routes)
 
 @router.get("/incidents", response_model=list[Incident])
 async def get_incidents():
@@ -80,11 +85,52 @@ async def upload_eido(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {e}")
 
 
-@router.post("/incidents/correlate", response_model=CorrelationResponse)
-async def correlate_incident(request: CorrelationRequest):
+from sentence_transformers import SentenceTransformer, util
+
+# Load a pre-trained model for sentence embeddings
+model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# In-memory store for incident embeddings
+incident_embeddings = {}
+
+@router.post("/incidents/{incident_id}/correlate", response_model=list[Incident])
+async def correlate_incident_endpoint(incident_id: str):
     """
-    Correlate a new incident with existing incidents.
+    Correlate an incident with existing incidents based on semantic similarity.
     """
-    # This is a placeholder for the actual correlation logic.
-    # In a real implementation, this would involve some form of AI/ML model.
-    return {"status": "new", "correlation_id": None}
+    try:
+        async with httpx.AsyncClient() as client:
+            # Get all incidents from the EIDO agent
+            response = await client.get(f"{EIDO_AGENT_URL}/api/v1/incidents")
+            response.raise_for_status()
+            incidents = response.json()
+
+            # Find the target incident
+            target_incident = next((inc for inc in incidents if inc['incident_id'] == incident_id), None)
+            if not target_incident:
+                raise HTTPException(status_code=404, detail="Target incident not found")
+
+            # Generate embeddings for all incident names
+            for inc in incidents:
+                if inc['incident_id'] not in incident_embeddings:
+                    incident_embeddings[inc['incident_id']] = model.encode(inc['name'])
+
+            target_embedding = incident_embeddings[incident_id]
+
+            # Calculate similarities and find correlated incidents
+            correlated_incidents = []
+            for inc in incidents:
+                if inc['incident_id'] != incident_id:
+                    similarity = util.cos_sim(target_embedding, incident_embeddings[inc['incident_id']])
+                    if similarity > 0.8: # Similarity threshold
+                        correlated_incidents.append(inc)
+            
+            return correlated_incidents
+
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=f"Error from EIDO Agent: {e.response.text}")
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Error connecting to EIDO Agent: {e}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred during correlation: {e}")
+
